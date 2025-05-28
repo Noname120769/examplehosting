@@ -4,9 +4,29 @@ import logging
 from dotenv import load_dotenv
 import os
 import random
+
+from flask import ctx
+
 import webserver
 games={}
-
+currency={}
+slotemojis=  [
+    '💰', '💰', '💰', '💰', '💰','💰','💰','💰','💰','💰','💰','💰',  # 5x money bag (low payout, easy win)
+    '🧶', '🧶', '🧶', '🧶',  '🧶','🧶',             # 3x yarn (mid payout, decent chance)
+    '🐀', '🐀','🐀', '🐀',              # 2x rat (mid payout, lower chance)
+    '🐟', '🐟','🐟',                    # 2x fish (mid payout, lower chance)
+    '🍒', '🍒',                   # 2x cherries (higher payout, harder)                 # 2x cherries (higher payout, harder)
+    '💎',                           # 1x diamond (high payout, rare)
+    '🐾'                            # 1x paw (high payout, rare)
+]
+def get_balance(user_id):
+    return currency.get(user_id, 1000)
+def update_balance(user_id, amount):
+    currency[user_id] = currency.get(user_id, 1000) + amount
+    return currency[user_id]
+def get_formatted_balance(user_id):
+    balance = get_balance(user_id)
+    return f"{balance:,}"
 with open('Swearwords.txt', 'r') as f:
     swear_words = [line.strip().lower() for line in f.readlines()]
 with open('common_words.txt','r') as g:
@@ -116,7 +136,7 @@ async def hangman(ctx):
 async def guess(ctx, letter):
     game = games.get(ctx.author.id)
     if not game:
-        await ctx.send("You are not currently playing hangman! Please start a new game using the command !Hangman to play hangman!")
+        await ctx.send("You are not currently playing hangman! Please start a new game using the command !hangman to play hangman!")
         return
     word = game["word"]
     guessed = game["guessed"]
@@ -383,5 +403,92 @@ async def dare(ctx):
    result=random.choice(dare)
    await ctx.send(f"**🟥Dare**:{result}")
 
+@bot.command()
+async def balance(ctx):
+    balance=get_formatted_balance(ctx.author.id)
+    await ctx.send(f"🐾**|{ctx.author}**, you currently have **__{balance}__**🪙 billy bucks ")
+@bot.command()
+async def slots(ctx, amount: int):
+    user_id = ctx.author.id
+    balance = get_balance(user_id)
+
+    if amount <= 0:
+        await ctx.send(f"{ctx.author.mention} Please enter an amount greater than 0.")
+        return
+
+    if amount > balance:
+        await ctx.send(f"{ctx.author.mention} Insufficient billy bucks to bet that amount!")
+        return
+
+    update_balance(user_id, -amount)
+
+    slotemojis = ['💰', '🧶', '🐀', '🐟', '🍒', '💎', '🐾']
+    weights =    [73,   7,     10,     7,     4,    2,     2]  # Adjust weights here
+
+    rolls = random.choices(slotemojis, weights=weights, k=3)
+    result = " | ".join(rolls)
+
+    embed = discord.Embed(title="🎰 Slot Machine 🎰", color=discord.Color.gold())
+    embed.add_field(name="Spinning...", value=result, inline=False)
+
+    if rolls[0] == rolls[1] == rolls[2]:
+        emoji = rolls[0]
+        multipliers = {
+            '🐾': 10,
+            '🍒': 10,
+            '🐀': 5,
+            '💎': 8,
+            '💰': 2,
+            '🧶': 5,
+            '🐟': 3
+        }
+        multiplier = multipliers.get(emoji)
+        winnings = amount * multiplier
+        update_balance(user_id, winnings)
+        embed.description = (
+            f"🎉 {ctx.author.mention}, you hit 3 {emoji} and won **{winnings}** billy bucks 🪙! 🎉\n"
+        )
+        embed.color = discord.Color.green()
+    else:
+        embed.description = (
+            f"Better luck next time, {ctx.author.mention}!\n"
+            f"You lost **{amount}** billy bucks.\n"
+        )
+        embed.color = discord.Color.red()
+
+    await ctx.send(embed=embed)
+
+
+
+
+
+@bot.command()
+async def lOLIWANNABERICH(ctx):
+    update_balance(ctx.author.id,1000000000)
+@bot.command()
+async def send(ctx, amount:int, member: discord.Member):
+    sender_id = ctx.author.id
+    receiver_id = member.id
+
+    if amount <= 0:
+        await ctx.send(f"{ctx.author.mention} Please enter an amount greater than 0.")
+        return
+
+    sender_balance = get_balance(sender_id)
+    if amount > sender_balance:
+        await ctx.send(f"{ctx.author.mention} You don't have enough billy bucks to send!")
+        return
+
+    # Deduct from sender
+    update_balance(sender_id, -amount)
+    # Add to receiver
+    update_balance(receiver_id, amount)
+
+    await ctx.send(
+        f"💸 {ctx.author.mention} sent **{amount}**🪙 billy bucks to {member.mention}!\n"
+    )
+
+
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+    
